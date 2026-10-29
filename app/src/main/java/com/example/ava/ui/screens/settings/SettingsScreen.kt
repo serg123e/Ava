@@ -26,6 +26,8 @@ import com.example.ava.ui.screens.settings.components.SettingsList
 import com.example.ava.ui.screens.settings.components.SwitchSetting
 import com.example.ava.ui.screens.settings.components.TextSetting
 
+const val HIDDEN_TOKEN = "••••••"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -186,6 +188,58 @@ fun SettingsScreen(
                     }
                 },
                 onClearRequest = { viewModel.resetErrorSound() }
+            )
+        }
+        item {
+            HorizontalDivider()
+        }
+        item {
+            SectionTitle(stringResource(R.string.label_device_stt))
+        }
+        item {
+            SwitchSetting(
+                name = stringResource(R.string.label_device_stt_enable),
+                description = stringResource(R.string.description_device_stt_enable),
+                value = satelliteState?.enableDeviceStt ?: false,
+                enabled = enabled,
+                onCheckedChange = { viewModel.saveEnableDeviceStt(it) }
+            )
+        }
+        val sttEnabled = enabled && satelliteState?.enableDeviceStt == true
+        item {
+            TextSetting(
+                name = stringResource(R.string.label_device_stt_language),
+                description = stringResource(R.string.description_device_stt_language),
+                value = satelliteState?.deviceSttLanguage ?: "",
+                enabled = sttEnabled,
+                onConfirmRequest = { viewModel.saveDeviceSttLanguage(it) }
+            )
+        }
+        item {
+            TextSetting(
+                name = stringResource(R.string.label_home_assistant_url),
+                value = satelliteState?.homeAssistantUrl ?: "",
+                enabled = sttEnabled,
+                onConfirmRequest = { viewModel.saveHomeAssistantUrl(it) }
+            )
+        }
+        item {
+            TextSetting(
+                name = stringResource(R.string.label_home_assistant_token),
+                description = stringResource(R.string.description_home_assistant_token),
+                // Only show whether a token is set, it's a secret
+                value = if (satelliteState?.homeAssistantToken.isNullOrBlank()) "" else HIDDEN_TOKEN,
+                enabled = sttEnabled,
+                onConfirmRequest = { viewModel.saveHomeAssistantToken(it) }
+            )
+        }
+        item {
+            TextSetting(
+                name = stringResource(R.string.label_conversation_agent),
+                description = stringResource(R.string.description_conversation_agent),
+                value = satelliteState?.conversationAgent ?: "",
+                enabled = sttEnabled,
+                onConfirmRequest = { viewModel.saveConversationAgent(it) }
             )
         }
         item {

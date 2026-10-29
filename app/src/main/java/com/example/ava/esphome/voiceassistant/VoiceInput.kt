@@ -8,6 +8,7 @@ import com.google.protobuf.ByteString
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
@@ -62,6 +63,12 @@ interface VoiceInput {
      * also emitted with the raw audio data.
      */
     fun start(): Flow<AudioResult>
+
+    /**
+     * Releases the microphone while [paused] is true, e.g. so that the device
+     * speech recognizer can use it.
+     */
+    fun setPaused(paused: Boolean) {}
 }
 
 class VoiceInputImpl(
@@ -85,6 +92,12 @@ class VoiceInputImpl(
         get() = _isStreaming.get()
         set(value) = _isStreaming.set(value)
 
+    private val paused = MutableStateFlow(false)
+
+    override fun setPaused(paused: Boolean) {
+        this.paused.value = paused
+    }
+
     override suspend fun getAvailableWakeWords() = availableWakeWords()
     override suspend fun getAvailableStopWords() = availableStopWords()
 
@@ -102,8 +115,8 @@ class VoiceInputImpl(
         )
     }
 
-    override fun start() = muted.flatMapLatest { muted ->
-        if (muted) emptyFlow()
+    override fun start() = combine(muted, paused) { muted, paused -> muted || paused }.flatMapLatest { off ->
+        if (off) emptyFlow()
         else currentInput.flatMapLatest { (microphone, wakeWords, stopWords) ->
             channelFlow {
                 while (isActive) {

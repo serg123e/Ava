@@ -9,6 +9,7 @@ import androidx.media3.common.C.USAGE_MEDIA
 import com.example.ava.esphome.EspHomeDevice
 import com.example.ava.esphome.android.logger.TimberLogger
 import com.example.ava.esphome.android.mediaplayer.media3MediaPlayer
+import com.example.ava.esphome.android.stt.AndroidTextListener
 import com.example.ava.esphome.android.tts.AndroidTextSpeaker
 import com.example.ava.esphome.android.microphone.audioRecordMicrophoneFlow
 import com.example.ava.esphome.android.wakeword.MicroWakeWord
@@ -17,6 +18,7 @@ import com.example.ava.esphome.entities.SwitchEntity
 import com.example.ava.esphome.voiceassistant.VoiceAssistant
 import com.example.ava.esphome.voiceassistant.VoiceInputImpl
 import com.example.ava.esphome.voiceassistant.VoiceOutputImpl
+import com.example.ava.homeassistant.HomeAssistantConversationClient
 import com.example.ava.server.ServerImpl
 import com.example.ava.settings.AudioProcessingSettingsStore
 import com.example.ava.settings.MicrophoneSettingsStore
@@ -58,7 +60,23 @@ class DeviceBuilder @Inject constructor(
             voiceAssistant = VoiceAssistant(
                 coroutineContext = coroutineContext,
                 voiceInput = microphoneSettingsStore.toVoiceInput(),
-                voiceOutput = voiceOutput
+                voiceOutput = voiceOutput,
+                textListener = AndroidTextListener(
+                    context = context,
+                    language = { satelliteSettingsStore.deviceSttLanguage.get() }
+                ),
+                conversationClient = HomeAssistantConversationClient(
+                    url = { satelliteSettingsStore.homeAssistantUrl.get() },
+                    token = { satelliteSettingsStore.homeAssistantToken.get() },
+                    agentId = { satelliteSettingsStore.conversationAgent.get() },
+                    macAddress = { satelliteSettings.macAddress }
+                ),
+                // Needs Home Assistant's address and a token to send the recognised text
+                enableDeviceStt = {
+                    val settings = satelliteSettingsStore.get()
+                    settings.enableDeviceStt && settings.homeAssistantUrl.isNotBlank() &&
+                            settings.homeAssistantToken.isNotBlank()
+                }
             ),
             logger = TimberLogger(),
             entities = listOf(
@@ -140,6 +158,9 @@ class DeviceBuilder @Inject constructor(
             enableTextSpeaker = { enableDeviceTts.get() },
             volume = playerSettings.volume,
             muted = playerSettings.muted,
+            // Music from the same phone, inches from the microphone, garbles recognition
+            // ("turn off the radio" heard as "turn off the computer"), so duck it hard
+            duckMultiplier = 0.1f,
         )
     }
 }

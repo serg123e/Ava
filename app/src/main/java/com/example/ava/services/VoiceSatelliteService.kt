@@ -67,6 +67,13 @@ class VoiceSatelliteService() : LifecycleService() {
     }
 
     /**
+     * Asks the assistant a text command, as if it had been spoken.
+     */
+    fun askText(text: String) {
+        _voiceSatellite.value?.voiceAssistant?.askText(text)
+    }
+
+    /**
      * Stops the current conversation.
      */
     fun stopAssistant() {

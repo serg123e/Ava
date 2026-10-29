@@ -29,7 +29,20 @@ data class VoiceSatelliteSettings(
     val macAddress: String = DEFAULT_MAC_ADDRESS,
     val autoStart: Boolean = false,
     val trustAllSSLCerts: Boolean = false,
-)
+    val enableDeviceStt: Boolean = false,
+    val deviceSttLanguage: String = "",
+    val homeAssistantUrl: String = "",
+    val homeAssistantToken: String = "",
+    val conversationAgent: String = "",
+) {
+    // Settings are logged when loaded, keep the token out of the log
+    override fun toString() =
+        "VoiceSatelliteSettings(name=$name, serverPort=$serverPort, macAddress=$macAddress, " +
+                "autoStart=$autoStart, trustAllSSLCerts=$trustAllSSLCerts, enableDeviceStt=$enableDeviceStt, " +
+                "deviceSttLanguage=$deviceSttLanguage, homeAssistantUrl=$homeAssistantUrl, " +
+                "homeAssistantToken=${if (homeAssistantToken.isEmpty()) "" else "***"}, " +
+                "conversationAgent=$conversationAgent)"
+}
 
 private val DEFAULT = VoiceSatelliteSettings()
 
@@ -77,6 +90,37 @@ interface VoiceSatelliteSettingsStore : SettingsStore<VoiceSatelliteSettings> {
         get() = setting(
             get = { this.trustAllSSLCerts },
             set = { copy(trustAllSSLCerts = it) })
+
+    /**
+     * Whether voice commands are recognised on the device and sent to
+     * Home Assistant as text, instead of streaming the microphone audio.
+     */
+    val enableDeviceStt: SettingState<Boolean>
+        get() = setting(get = { enableDeviceStt }, set = { copy(enableDeviceStt = it) })
+
+    /**
+     * The language of the device speech recognizer as a BCP 47 tag, empty for the device language.
+     */
+    val deviceSttLanguage: SettingState<String>
+        get() = setting(get = { deviceSttLanguage }, set = { copy(deviceSttLanguage = it) })
+
+    /**
+     * The base URL of Home Assistant, used to send recognised commands.
+     */
+    val homeAssistantUrl: SettingState<String>
+        get() = setting(get = { homeAssistantUrl }, set = { copy(homeAssistantUrl = it) })
+
+    /**
+     * A Home Assistant long-lived access token.
+     */
+    val homeAssistantToken: SettingState<String>
+        get() = setting(get = { homeAssistantToken }, set = { copy(homeAssistantToken = it) })
+
+    /**
+     * The conversation agent for recognised commands, empty for Home Assistant's default.
+     */
+    val conversationAgent: SettingState<String>
+        get() = setting(get = { conversationAgent }, set = { copy(conversationAgent = it) })
 
     /**
      * Ensures that a mac address has been generated and persisted.

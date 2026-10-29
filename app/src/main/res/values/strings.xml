@@ -13,6 +13,16 @@
     <string name="label_help">Help</string>
     <string name="label_sounds">Sounds</string>
     <string name="label_advanced">Advanced</string>
+    <string name="label_device_stt">Device speech recognition</string>
+    <string name="label_device_stt_enable">Recognise speech on the device</string>
+    <string name="description_device_stt_enable">Recognise voice commands with this device\'s speech recognizer and send them to Home Assistant as text. Needs the Home Assistant URL and an access token</string>
+    <string name="label_device_stt_language">Recognition language</string>
+    <string name="description_device_stt_language">A language tag such as ru-RU, empty for the device language</string>
+    <string name="label_home_assistant_url">Home Assistant URL</string>
+    <string name="label_home_assistant_token">Access token</string>
+    <string name="description_home_assistant_token">A long-lived access token from your Home Assistant profile</string>
+    <string name="label_conversation_agent">Conversation agent</string>
+    <string name="description_conversation_agent">The agent entity, e.g. conversation.home_assistant, empty for the default agent</string>
     <string name="label_device_tts">Device voice</string>
     <string name="label_device_tts_enable">Speak with the device voice</string>
     <string name="description_device_tts_enable">Speak responses with this device\'s text-to-speech engine instead of the audio from Home Assistant</string>

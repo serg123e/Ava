@@ -252,14 +252,55 @@ val unspecified_scheme = ColorFamily(
     Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified
 )
 
+/**
+ * Green phosphor on black, like an old monochrome monitor; amber marks errors,
+ * as on amber monitors.
+ */
+private val phosphorScheme = darkColorScheme(
+    primary = Color(0xFF33FF66),
+    onPrimary = Color(0xFF001A08),
+    primaryContainer = Color(0xFF003B14),
+    onPrimaryContainer = Color(0xFF66FF8C),
+    secondary = Color(0xFF22AA44),
+    onSecondary = Color(0xFF001A08),
+    secondaryContainer = Color(0xFF00290E),
+    onSecondaryContainer = Color(0xFF55DD77),
+    tertiary = Color(0xFFB3FF66),
+    onTertiary = Color(0xFF0F1A00),
+    tertiaryContainer = Color(0xFF263B00),
+    onTertiaryContainer = Color(0xFFCCFF99),
+    error = Color(0xFFFFB000),
+    onError = Color(0xFF1A1000),
+    errorContainer = Color(0xFF3B2900),
+    onErrorContainer = Color(0xFFFFCC55),
+    background = Color.Black,
+    onBackground = Color(0xFF33FF66),
+    surface = Color.Black,
+    onSurface = Color(0xFF33FF66),
+    surfaceVariant = Color(0xFF001A08),
+    onSurfaceVariant = Color(0xFF29CC52),
+    outline = Color(0xFF1F8F3D),
+    outlineVariant = Color(0xFF0F4D20),
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF000D04),
+    surfaceContainer = Color(0xFF001207),
+    surfaceContainerHigh = Color(0xFF001A0A),
+    surfaceContainerHighest = Color(0xFF00220D),
+    inverseSurface = Color(0xFF33FF66),
+    inverseOnSurface = Color.Black,
+    inversePrimary = Color(0xFF006622),
+)
+
 @Composable
 fun AvaTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
+    phosphor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
+        phosphor -> phosphorScheme
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

@@ -100,6 +100,27 @@ class SettingsViewModel @Inject constructor(
             )
         }
 
+    fun saveEnableDeviceStt(enable: Boolean) = viewModelScope.launch {
+        satelliteSettingsStore.enableDeviceStt.set(enable)
+    }
+
+    fun saveDeviceSttLanguage(language: String) = viewModelScope.launch {
+        satelliteSettingsStore.deviceSttLanguage.set(language.trim())
+    }
+
+    fun saveHomeAssistantUrl(url: String) = viewModelScope.launch {
+        satelliteSettingsStore.homeAssistantUrl.set(url.trim())
+    }
+
+    fun saveHomeAssistantToken(token: String) = viewModelScope.launch {
+        // The dialog starts with the placeholder for a set token, keep the token if it's unchanged
+        if (token != HIDDEN_TOKEN) satelliteSettingsStore.homeAssistantToken.set(token.trim())
+    }
+
+    fun saveConversationAgent(agent: String) = viewModelScope.launch {
+        satelliteSettingsStore.conversationAgent.set(agent.trim())
+    }
+
     fun saveEnableDeviceTts(enable: Boolean) = viewModelScope.launch {
         playerSettingsStore.enableDeviceTts.set(enable)
     }

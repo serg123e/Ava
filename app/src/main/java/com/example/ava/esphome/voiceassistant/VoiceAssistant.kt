@@ -5,7 +5,10 @@ import androidx.annotation.RequiresPermission
 import com.example.ava.esphome.Connected
 import com.example.ava.esphome.Disconnected
 import com.example.ava.esphome.EspHomeState
+import com.example.ava.esphome.stt.ListenResult
+import com.example.ava.esphome.stt.TextListener
 import com.example.ava.esphome.voiceassistant.VoiceTimer.Companion.timerFromEvent
+import com.example.ava.homeassistant.ConversationClient
 import com.example.esphomeproto.api.VoiceAssistantAnnounceRequest
 import com.example.esphomeproto.api.VoiceAssistantConfigurationRequest
 import com.example.esphomeproto.api.VoiceAssistantEventResponse
@@ -32,8 +35,10 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import timber.log.Timber
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resume
 import kotlin.time.Clock
 
 data object Listening : EspHomeState
@@ -46,6 +51,9 @@ class VoiceAssistant(
     coroutineContext: CoroutineContext,
     val voiceInput: VoiceInput,
     val voiceOutput: VoiceOutput,
+    private val textListener: TextListener? = null,
+    private val conversationClient: ConversationClient? = null,
+    private val enableDeviceStt: suspend () -> Boolean = { false },
 ) : AutoCloseable {
     private val scope = CoroutineScope(
         coroutineContext + Job(coroutineContext.job) + CoroutineName("${this.javaClass.simpleName} Scope")
@@ -57,6 +65,8 @@ class VoiceAssistant(
 
     private var pipeline: VoicePipeline? = null
     private var announcement: Announcement? = null
+    private var deviceConversation: Job? = null
+    private var deviceConversationId: String? = null
     private val _pendingTimers = MutableStateFlow<Map<String, VoiceTimer>>(emptyMap())
     private val _ringingTimer = MutableStateFlow<VoiceTimer?>(null)
 
@@ -216,6 +226,10 @@ class VoiceAssistant(
         // TODO: Should the assistant also wake?
         if (isRinging) {
             doStopTimer()
+        } else if (_state.value == Responding && deviceConversation != null) {
+            // The device voice plays right next to the microphone and its own speech can
+            // trigger the wake word, cutting the response short
+            Timber.d("Ignoring wake word while speaking the response")
         } else {
             doWakeAssistant(wakeWordPhrase)
         }
@@ -237,10 +251,14 @@ class VoiceAssistant(
         // so ensure the assistant is only woken once. Currently this is
         // achieved by creating a pipeline in the Listening state
         // on the first wake detection and checking for that here.
-        if (pipeline?.state == Listening) return
+        if (pipeline?.state == Listening || deviceConversation?.isActive == true) return
 
         Timber.d("Wake assistant")
         resetState()
+        if (textListener != null && conversationClient != null && enableDeviceStt()) {
+            startDeviceConversation(textListener, conversationClient, isContinueConversation)
+            return
+        }
         pipeline = createPipeline()
         if (!isContinueConversation) {
             voiceOutput.duck()
@@ -251,6 +269,90 @@ class VoiceAssistant(
         } else {
             pipeline?.start()
         }
+    }
+
+    /**
+     * Runs a conversation turn on the device: the command is recognised by the device
+     * speech recognizer and sent to Home Assistant as text, and the response is spoken
+     * by the device voice. Falls back to the Home Assistant pipeline if recognition
+     * doesn't work.
+     */
+    private fun startDeviceConversation(
+        textListener: TextListener,
+        conversationClient: ConversationClient,
+        isContinueConversation: Boolean
+    ) {
+        deviceConversation = scope.launch {
+            voiceOutput.duck()
+            if (!isContinueConversation) {
+                deviceConversationId = null
+                suspendCancellableCoroutine { cont ->
+                    scope.launch { voiceOutput.playWakeSound { cont.resume(Unit) } }
+                }
+            }
+            _state.value = Listening
+            // The recognizer needs the microphone that the wake word detection holds
+            voiceInput.setPaused(true)
+            val heard = try {
+                textListener.listen()
+            } finally {
+                voiceInput.setPaused(false)
+            }
+            when (heard) {
+                is ListenResult.NoSpeech -> endDeviceConversation()
+
+                is ListenResult.Failed -> {
+                    Timber.w("Device recognition failed (${heard.reason}), using the Home Assistant pipeline")
+                    _state.value = Connected
+                    pipeline = createPipeline()
+                    pipeline?.start()
+                }
+
+                is ListenResult.Text -> respondTo(heard.text, conversationClient)
+            }
+        }
+    }
+
+    /**
+     * Sends a text command to the agent as if it had been spoken, e.g. from a button,
+     * and speaks the response with the device voice.
+     */
+    fun askText(text: String) {
+        val conversationClient = conversationClient ?: return
+        scope.launch {
+            resetState()
+            deviceConversationId = null
+            deviceConversation = scope.launch {
+                voiceOutput.duck()
+                respondTo(text, conversationClient)
+            }
+        }
+    }
+
+    private suspend fun respondTo(text: String, conversationClient: ConversationClient) {
+        _state.value = Processing
+        val result = conversationClient.process(text, deviceConversationId)
+        if (result == null) {
+            _state.value = VoiceError("Home Assistant is unavailable")
+            voiceOutput.playErrorSound { scope.launch { endDeviceConversation() } }
+            return
+        }
+        deviceConversationId = result.conversationId
+        _state.value = Responding
+        voiceOutput.speakText(result.speech) {
+            scope.launch {
+                if (result.continueConversation) {
+                    Timber.d("Continuing conversation")
+                    deviceConversation = null
+                    doWakeAssistant(isContinueConversation = true)
+                } else endDeviceConversation()
+            }
+        }
+    }
+
+    private fun endDeviceConversation() {
+        _state.value = Connected
+        voiceOutput.unDuck()
     }
 
     private fun createPipeline() = VoicePipeline(
@@ -311,6 +413,9 @@ class VoiceAssistant(
     }
 
     private suspend fun resetState(newState: EspHomeState = Connected) {
+        deviceConversation?.cancel()
+        deviceConversation = null
+        voiceInput.setPaused(false)
         pipeline?.stop()
         pipeline = null
         announcement?.stop()

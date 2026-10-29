@@ -28,6 +28,7 @@ import com.example.ava.tasker.conversingStates
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,10 +62,7 @@ import kotlinx.coroutines.flow.flowOf
  * The satellite status and a large button to talk to the assistant without the wake word.
  */
 @Composable
-fun VoiceSatelliteStatus(viewModel: ServiceViewModel = hiltViewModel()) {
-    val service by viewModel.satellite.collectAsStateWithLifecycle(null)
-    val currentService = service
-
+fun VoiceSatelliteStatus() {
     Column(
         modifier = Modifier
             .padding(16.dp)
@@ -71,41 +70,85 @@ fun VoiceSatelliteStatus(viewModel: ServiceViewModel = hiltViewModel()) {
         verticalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (currentService == null) {
-            StatusText(
-                text = "Service disconnected",
-                color = MaterialTheme.colorScheme.error
-            )
-        } else {
-            val serviceState by currentService.voiceSatelliteState.collectAsStateWithLifecycle(
-                Stopped
-            )
-            val resources = LocalResources.current
-
-            StatusText(
-                text = remember(serviceState) { serviceState.translate(resources) },
-                color = stateColor(serviceState)
-            )
-
-            val conversing = serviceState in conversingStates
-            TalkButton(
-                conversing = conversing,
-                enabled = conversing || serviceState is Connected || serviceState is VoiceError,
-                onClick = {
-                    if (conversing) currentService.stopAssistant()
-                    else currentService.wakeAssistant()
-                }
-            )
-        }
+        SatelliteStatusText()
+        SatelliteTalkButton()
     }
 }
 
+/**
+ * The state of the voice satellite, e.g. Idle or Listening.
+ */
 @Composable
-private fun TalkButton(conversing: Boolean, enabled: Boolean, onClick: () -> Unit) {
+fun SatelliteStatusText(modifier: Modifier = Modifier, viewModel: ServiceViewModel = hiltViewModel()) {
+    val service by viewModel.satellite.collectAsStateWithLifecycle(null)
+    val currentService = service
+    if (currentService == null) {
+        StatusText(
+            text = "Service disconnected",
+            color = MaterialTheme.colorScheme.error,
+            modifier = modifier
+        )
+        return
+    }
+    val serviceState by currentService.voiceSatelliteState.collectAsStateWithLifecycle(Stopped)
+    val resources = LocalResources.current
+    StatusText(
+        text = remember(serviceState) { serviceState.translate(resources) },
+        color = stateColor(serviceState),
+        modifier = modifier
+    )
+}
+
+/**
+ * What a talk button shows and does: start a conversation without the wake word,
+ * or stop the current one.
+ */
+@Immutable
+data class TalkState(val conversing: Boolean, val enabled: Boolean, val onClick: () -> Unit)
+
+@Composable
+fun talkState(viewModel: ServiceViewModel = hiltViewModel()): TalkState? {
+    val service by viewModel.satellite.collectAsStateWithLifecycle(null)
+    val currentService = service ?: return null
+    val serviceState by currentService.voiceSatelliteState.collectAsStateWithLifecycle(Stopped)
+    val conversing = serviceState in conversingStates
+    return TalkState(
+        conversing = conversing,
+        enabled = conversing || serviceState is Connected || serviceState is VoiceError,
+        onClick = {
+            if (conversing) currentService.stopAssistant()
+            else currentService.wakeAssistant()
+        }
+    )
+}
+
+/**
+ * Starts a conversation without the wake word, or stops the current one.
+ */
+@Composable
+fun SatelliteTalkButton(modifier: Modifier = Modifier, size: Dp = 160.dp) {
+    val state = talkState() ?: return
+    TalkButton(
+        conversing = state.conversing,
+        enabled = state.enabled,
+        size = size,
+        modifier = modifier,
+        onClick = state.onClick
+    )
+}
+
+@Composable
+private fun TalkButton(
+    conversing: Boolean,
+    enabled: Boolean,
+    size: Dp,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
     FilledIconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(160.dp),
+        modifier = modifier.size(size),
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = if (conversing) MaterialTheme.colorScheme.tertiary
             else MaterialTheme.colorScheme.primary
@@ -116,7 +159,7 @@ private fun TalkButton(conversing: Boolean, enabled: Boolean, onClick: () -> Uni
             contentDescription = stringResource(
                 if (conversing) R.string.label_stop_talking else R.string.label_talk
             ),
-            modifier = Modifier.size(72.dp)
+            modifier = Modifier.size(size * 0.45f)
         )
     }
 }
@@ -147,10 +190,11 @@ fun VoiceSatelliteSwitch(viewModel: ServiceViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun StatusText(text: String, color: Color) {
+private fun StatusText(text: String, color: Color, modifier: Modifier = Modifier) {
     Text(
         text = text,
         color = color,
+        modifier = modifier,
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold
     )

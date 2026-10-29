@@ -18,15 +18,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.ava.R
 import com.example.ava.ui.Settings
+import com.example.ava.ui.screens.settings.SettingsViewModel
 import com.example.ava.ui.services.VoiceSatelliteStatus
 import com.example.ava.ui.services.ThinkingFrame
 import com.example.ava.ui.services.VoiceSatelliteSwitch
@@ -35,10 +39,23 @@ import com.example.ava.ui.services.components.timerState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavController) {
+fun HomeScreen(
+    navController: NavController,
+    settingsViewModel: SettingsViewModel = hiltViewModel()
+) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val timerState = timerState()
+    val satelliteSettings by settingsViewModel.satelliteSettingsState.collectAsStateWithLifecycle(null)
+    val satelliteName = satelliteSettings?.name
+
+    if (isLandscape) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            RetroHome(onSettings = { navController.navigate(Settings) })
+            ThinkingFrame()
+        }
+        return
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -50,10 +67,14 @@ fun HomeScreen(navController: NavController) {
                         titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ),
                     title = {
-                        Text(stringResource(R.string.app_name))
+                        // The satellite name tells devices apart, e.g. on several phones
+                        Text(satelliteName ?: stringResource(R.string.app_name))
+                    },
+                    // On the left, away from the settings button
+                    navigationIcon = {
+                        VoiceSatelliteSwitch()
                     },
                     actions = {
-                        VoiceSatelliteSwitch()
                         IconButton(onClick = { navController.navigate(Settings) }) {
                             Icon(
                                 painter = painterResource(R.drawable.settings_24px),
@@ -65,53 +86,17 @@ fun HomeScreen(navController: NavController) {
                 )
             }
         ) { innerPadding ->
-            val hasTimers = timerState.timers.isNotEmpty()
-
-            if (isLandscape) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = if (hasTimers) 16.dp else 48.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        VoiceSatelliteStatus()
-                    }
-
-                    if (hasTimers) {
-                        LazyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            contentPadding = PaddingValues(vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(
-                                16.dp,
-                                Alignment.CenterVertically
-                            )
-                        ) {
-                            timerListSection(state = timerState)
-                        }
-                    }
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+            ) {
+                item {
+                    VoiceSatelliteStatus()
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
-                ) {
-                    item {
-                        VoiceSatelliteStatus()
-                    }
-                    timerListSection(state = timerState)
-                }
+                timerListSection(state = timerState)
             }
         }
         ThinkingFrame()
