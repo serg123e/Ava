@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.ava.R
 import com.example.ava.ui.Settings
-import com.example.ava.ui.services.StartStopVoiceSatellite
+import com.example.ava.ui.services.VoiceSatelliteStatus
+import com.example.ava.ui.services.ThinkingFrame
+import com.example.ava.ui.services.VoiceSatelliteSwitch
 import com.example.ava.ui.services.components.timerListSection
 import com.example.ava.ui.services.components.timerState
 
@@ -38,76 +40,80 @@ fun HomeScreen(navController: NavController) {
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val timerState = timerState()
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
-                title = {
-                    Text(stringResource(R.string.app_name))
-                },
-                actions = {
-                    IconButton(onClick = { navController.navigate(Settings) }) {
-                        Icon(
-                            painter = painterResource(R.drawable.settings_24px),
-                            contentDescription = stringResource(R.string.label_settings),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                CenterAlignedTopAppBar(
+                    colors = topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    ),
+                    title = {
+                        Text(stringResource(R.string.app_name))
+                    },
+                    actions = {
+                        VoiceSatelliteSwitch()
+                        IconButton(onClick = { navController.navigate(Settings) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.settings_24px),
+                                contentDescription = stringResource(R.string.label_settings),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
-                }
-            )
-        }
-    ) { innerPadding ->
-        val hasTimers = timerState.timers.isNotEmpty()
+                )
+            }
+        ) { innerPadding ->
+            val hasTimers = timerState.timers.isNotEmpty()
 
-        if (isLandscape) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = if (hasTimers) 16.dp else 48.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(
+            if (isLandscape) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    contentAlignment = Alignment.Center
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(horizontal = if (hasTimers) 16.dp else 48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    StartStopVoiceSatellite()
-                }
-
-                if (hasTimers) {
-                    LazyColumn(
+                    Box(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(
-                            16.dp,
-                            Alignment.CenterVertically
-                        )
+                        contentAlignment = Alignment.Center
                     ) {
-                        timerListSection(state = timerState)
+                        VoiceSatelliteStatus()
+                    }
+
+                    if (hasTimers) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            contentPadding = PaddingValues(vertical = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(
+                                16.dp,
+                                Alignment.CenterVertically
+                            )
+                        ) {
+                            timerListSection(state = timerState)
+                        }
                     }
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
-            ) {
-                item {
-                    StartStopVoiceSatellite()
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+                ) {
+                    item {
+                        VoiceSatelliteStatus()
+                    }
+                    timerListSection(state = timerState)
                 }
-                timerListSection(state = timerState)
             }
         }
+        ThinkingFrame()
     }
 }

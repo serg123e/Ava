@@ -26,6 +26,11 @@ data class PlayerSettings(
     val repeatTimerFinishedSound: Boolean = true,
     val enableErrorSound: Boolean = false,
     val errorSound: String = defaultErrorSound,
+    val enableDeviceTts: Boolean = false,
+    val deviceTtsEngine: String = "",
+    val deviceTtsLanguage: String = "",
+    val deviceTtsVoice: String = "",
+    val deviceTtsRatePercent: Int = 100,
 )
 
 private val DEFAULT = PlayerSettings()
@@ -97,4 +102,35 @@ interface PlayerSettingsStore : SettingsStore<PlayerSettings> {
      */
     val errorSound: SettingState<String>
         get() = setting(get = { errorSound }, set = { copy(errorSound = it) })
+
+    /**
+     * Whether responses are spoken with the device's text-to-speech engine
+     * instead of playing the TTS audio from Home Assistant.
+     */
+    val enableDeviceTts: SettingState<Boolean>
+        get() = setting(get = { enableDeviceTts }, set = { copy(enableDeviceTts = it) })
+
+    /**
+     * The package name of the device text-to-speech engine, empty for the system default.
+     */
+    val deviceTtsEngine: SettingState<String>
+        get() = setting(get = { deviceTtsEngine }, set = { copy(deviceTtsEngine = it) })
+
+    /**
+     * The language tag used to filter the voices of the device text-to-speech engine.
+     */
+    val deviceTtsLanguage: SettingState<String>
+        get() = setting(get = { deviceTtsLanguage }, set = { copy(deviceTtsLanguage = it) })
+
+    /**
+     * The name of the device text-to-speech voice, empty for the engine's default.
+     */
+    val deviceTtsVoice: SettingState<String>
+        get() = setting(get = { deviceTtsVoice }, set = { copy(deviceTtsVoice = it) })
+
+    /**
+     * The device text-to-speech rate as a percentage of normal speed.
+     */
+    val deviceTtsRatePercent: SettingState<Int>
+        get() = setting(get = { deviceTtsRatePercent }, set = { copy(deviceTtsRatePercent = it) })
 }

@@ -8,6 +8,9 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ava.R
+import com.example.ava.esphome.android.tts.AndroidTextSpeaker
+import com.example.ava.esphome.android.tts.DeviceTtsEngine
+import com.example.ava.esphome.android.tts.DeviceTtsVoice
 import com.example.ava.settings.MicrophoneSettingsStore
 import com.example.ava.settings.PlayerSettingsStore
 import com.example.ava.settings.VoiceSatelliteSettingsStore
@@ -18,9 +21,12 @@ import com.example.ava.settings.defaultWakeSound
 import com.example.ava.wakewords.models.WakeWordWithId
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.util.Locale
 import javax.inject.Inject
 
 @Immutable
@@ -29,6 +35,23 @@ data class MicrophoneState(
     val secondWakeWord: WakeWordWithId?,
     val wakeWords: List<WakeWordWithId>,
     val customWakeWordLocation: Uri?
+)
+
+/**
+ * A language offered by a device text-to-speech engine,
+ * keyed by its ISO 639-2 code as engines differ in how they report locales.
+ */
+@Immutable
+data class DeviceTtsLanguage(val code: String, val name: String)
+
+@Immutable
+data class DeviceTtsState(
+    val engines: List<DeviceTtsEngine>,
+    val engine: DeviceTtsEngine?,
+    val languages: List<DeviceTtsLanguage>,
+    val language: DeviceTtsLanguage?,
+    val voices: List<DeviceTtsVoice>,
+    val voice: DeviceTtsVoice?
 )
 
 @HiltViewModel
@@ -55,6 +78,80 @@ class SettingsViewModel @Inject constructor(
     }
 
     val playerSettingsState = playerSettingsStore.getFlow()
+
+    val deviceTtsState = playerSettingsStore.getFlow()
+        .map { it.deviceTtsEngine }
+        .distinctUntilChanged()
+        .map { AndroidTextSpeaker.catalog(context, it) }
+        .combine(playerSettingsStore.getFlow()) { (engines, allVoices), settings ->
+            val languages = allVoices.map { it.locale.isO3Language }.distinct()
+                .map { DeviceTtsLanguage(it, languageName(it)) }
+                .sortedBy { it.name }
+            val language = languages.firstOrNull { it.code == settings.deviceTtsLanguage }
+                ?: languages.firstOrNull { it.code == Locale.getDefault().isO3Language }
+            val voices = allVoices.filter { language == null || it.locale.isO3Language == language.code }
+            DeviceTtsState(
+                engines = engines,
+                engine = engines.firstOrNull { it.name == settings.deviceTtsEngine },
+                languages = languages,
+                language = language,
+                voices = voices,
+                voice = voices.firstOrNull { it.name == settings.deviceTtsVoice }
+            )
+        }
+
+    fun saveEnableDeviceTts(enable: Boolean) = viewModelScope.launch {
+        playerSettingsStore.enableDeviceTts.set(enable)
+    }
+
+    fun saveDeviceTtsEngine(engine: String) = viewModelScope.launch {
+        // Voices belong to an engine, so the old voice no longer applies
+        playerSettingsStore.update {
+            it.copy(deviceTtsEngine = engine, deviceTtsVoice = "")
+        }
+    }
+
+    fun saveDeviceTtsLanguage(language: String) = viewModelScope.launch {
+        playerSettingsStore.update {
+            it.copy(deviceTtsLanguage = language, deviceTtsVoice = "")
+        }
+    }
+
+    fun saveDeviceTtsVoice(voice: String) = viewModelScope.launch {
+        playerSettingsStore.deviceTtsVoice.set(voice)
+    }
+
+    fun saveDeviceTtsRate(ratePercent: Int?) = viewModelScope.launch {
+        if (validateDeviceTtsRate(ratePercent).isNullOrBlank()) {
+            playerSettingsStore.deviceTtsRatePercent.set(ratePercent!!)
+        }
+    }
+
+    fun speakDeviceTtsSample() = viewModelScope.launch {
+        val settings = playerSettingsStore.get()
+        val sample = if (settings.deviceTtsLanguage == "rus")
+            "Здравствуйте! Сейчас плюс пятнадцать и пасмурно."
+        else "Hello! It is fifteen degrees and cloudy."
+        AndroidTextSpeaker.speakSample(
+            context,
+            settings.deviceTtsEngine,
+            settings.deviceTtsVoice,
+            settings.deviceTtsRatePercent / 100f,
+            sample
+        )
+    }
+
+    fun validateDeviceTtsRate(ratePercent: Int?): String? =
+        if (ratePercent == null || ratePercent < 25 || ratePercent > 300)
+            context.getString(R.string.validation_device_tts_rate)
+        else null
+
+    /**
+     * The display name of an ISO 639-2 language code, which [Locale] can't look up directly.
+     */
+    private fun languageName(iso3: String): String =
+        Locale.getAvailableLocales().firstOrNull { runCatching { it.isO3Language }.getOrNull() == iso3 }
+            ?.getDisplayLanguage(Locale.getDefault()) ?: iso3
 
     fun saveName(name: String) = viewModelScope.launch {
         if (validateName(name).isNullOrBlank()) {

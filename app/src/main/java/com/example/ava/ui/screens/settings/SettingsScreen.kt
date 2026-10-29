@@ -38,6 +38,9 @@ fun SettingsScreen(
     val satelliteState by viewModel.satelliteSettingsState.collectAsStateWithLifecycle(null)
     val microphoneState by viewModel.microphoneSettingsState.collectAsStateWithLifecycle(null)
     val playerState by viewModel.playerSettingsState.collectAsStateWithLifecycle(null)
+    val deviceTtsState by viewModel.deviceTtsState.collectAsStateWithLifecycle(null)
+    val defaultLabel = stringResource(R.string.label_device_tts_default)
+    val networkLabel = stringResource(R.string.label_device_tts_network)
     val disabledLabel = stringResource(R.string.label_disabled)
 
     SettingsList(innerPadding) {
@@ -183,6 +186,74 @@ fun SettingsScreen(
                     }
                 },
                 onClearRequest = { viewModel.resetErrorSound() }
+            )
+        }
+        item {
+            HorizontalDivider()
+        }
+        item {
+            SectionTitle(stringResource(R.string.label_device_tts))
+        }
+        item {
+            SwitchSetting(
+                name = stringResource(R.string.label_device_tts_enable),
+                description = stringResource(R.string.description_device_tts_enable),
+                value = playerState?.enableDeviceTts ?: false,
+                enabled = enabled,
+                onCheckedChange = { viewModel.saveEnableDeviceTts(it) }
+            )
+        }
+        val ttsEnabled = enabled && playerState?.enableDeviceTts == true
+        item {
+            SelectSetting(
+                name = stringResource(R.string.label_device_tts_engine),
+                selected = deviceTtsState?.engine,
+                items = deviceTtsState?.engines,
+                enabled = ttsEnabled,
+                key = { it.name },
+                value = { it?.label ?: defaultLabel },
+                onConfirmRequest = { if (it != null) viewModel.saveDeviceTtsEngine(it.name) }
+            )
+        }
+        item {
+            SelectSetting(
+                name = stringResource(R.string.label_device_tts_language),
+                selected = deviceTtsState?.language,
+                items = deviceTtsState?.languages,
+                enabled = ttsEnabled,
+                key = { it.code },
+                value = { it?.name ?: defaultLabel },
+                onConfirmRequest = { if (it != null) viewModel.saveDeviceTtsLanguage(it.code) }
+            )
+        }
+        item {
+            SelectSetting(
+                name = stringResource(R.string.label_device_tts_voice),
+                selected = deviceTtsState?.voice,
+                items = deviceTtsState?.voices,
+                enabled = ttsEnabled,
+                key = { it.name },
+                value = { it?.name ?: defaultLabel },
+                itemDescription = { if (it.requiresNetwork) networkLabel else null },
+                onConfirmRequest = { if (it != null) viewModel.saveDeviceTtsVoice(it.name) }
+            )
+        }
+        item {
+            IntSetting(
+                name = stringResource(R.string.label_device_tts_rate),
+                value = playerState?.deviceTtsRatePercent,
+                enabled = ttsEnabled,
+                validation = { viewModel.validateDeviceTtsRate(it) },
+                onConfirmRequest = { viewModel.saveDeviceTtsRate(it) }
+            )
+        }
+        item {
+            SettingItem(
+                modifier = Modifier.clickable(enabled = ttsEnabled) {
+                    viewModel.speakDeviceTtsSample()
+                },
+                name = stringResource(R.string.label_device_tts_try),
+                description = stringResource(R.string.description_device_tts_try),
             )
         }
         item {

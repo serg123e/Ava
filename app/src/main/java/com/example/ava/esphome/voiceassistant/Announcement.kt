@@ -17,13 +17,30 @@ class Announcement(
     private var _state: EspHomeState = Connected
     val state get() = _state
 
-    fun announce(mediaUrl: String, preannounceUrl: String, continueConversation: Boolean) {
+    suspend fun announce(
+        mediaUrl: String,
+        preannounceUrl: String,
+        continueConversation: Boolean,
+        text: String = ""
+    ) {
         updateState(Responding)
-        voiceOutput.playAnnouncement(preannounceUrl, mediaUrl) {
+        val onCompletion: () -> Unit = {
             scope.launch {
                 stop()
                 ended(continueConversation)
             }
+        }
+        if (text.isNotBlank() && voiceOutput.speaksText()) {
+            // Speak the announcement text on the device, after the preannounce sound if any
+            if (preannounceUrl.isNotEmpty()) {
+                voiceOutput.playTTS(preannounceUrl) {
+                    scope.launch { voiceOutput.speakText(text, onCompletion) }
+                }
+            } else {
+                voiceOutput.speakText(text, onCompletion)
+            }
+        } else {
+            voiceOutput.playAnnouncement(preannounceUrl, mediaUrl, onCompletion)
         }
     }
 

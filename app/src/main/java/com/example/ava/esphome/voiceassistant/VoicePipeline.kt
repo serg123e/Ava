@@ -89,7 +89,10 @@ class VoicePipeline(
 
             VoiceAssistantEvent.VOICE_ASSISTANT_INTENT_PROGRESS -> {
                 // If the pipeline supports TTS streaming it is started here
-                if (voiceEvent.dataList.firstOrNull { data -> data.name == "tts_start_streaming" }?.value == "1") {
+                // (unless responses are spoken on the device, which needs the complete text)
+                if (voiceEvent.dataList.firstOrNull { data -> data.name == "tts_start_streaming" }?.value == "1" &&
+                    !voiceOutput.speaksText()
+                ) {
                     ttsStreamUrl?.let {
                         ttsPlayed = true
                         voiceOutput.playTTS(it) { scope.launch { fireEnded() } }
@@ -108,6 +111,12 @@ class VoicePipeline(
             VoiceAssistantEvent.VOICE_ASSISTANT_TTS_START -> {
                 // TTS response is being generated
                 updateState(Responding)
+                // The event carries the response text, speak it on the device if enabled
+                val text = voiceEvent.dataList.firstOrNull { data -> data.name == "text" }?.value
+                if (!ttsPlayed && !text.isNullOrBlank() && voiceOutput.speaksText()) {
+                    ttsPlayed = true
+                    voiceOutput.speakText(text) { scope.launch { fireEnded() } }
+                }
             }
 
             VoiceAssistantEvent.VOICE_ASSISTANT_TTS_END -> {

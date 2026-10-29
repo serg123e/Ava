@@ -1,12 +1,24 @@
 package com.example.ava.esphome.voiceassistant
 
 import com.example.ava.esphome.mediaplayer.MediaPlayer
+import com.example.ava.esphome.tts.TextSpeaker
 
 interface VoiceOutput : AutoCloseable {
     /**
      * Plays a TTS response.
      */
     fun playTTS(ttsUrl: String, onCompletion: () -> Unit = {})
+
+    /**
+     * Whether responses should be spoken on the device from their text,
+     * using [speakText], instead of playing the TTS audio from Home Assistant.
+     */
+    suspend fun speaksText(): Boolean = false
+
+    /**
+     * Speaks a response on the device from its text.
+     */
+    suspend fun speakText(text: String, onCompletion: () -> Unit = {}) = onCompletion()
 
     /**
      * Plays an announcement, optionally with a preannounce sound.
@@ -58,6 +70,8 @@ class VoiceOutputImpl(
     private val repeatTimerFinishedSound: suspend () -> Boolean,
     private val enableErrorSound: suspend () -> Boolean,
     private val errorSound: suspend () -> String,
+    private val textSpeaker: TextSpeaker? = null,
+    private val enableTextSpeaker: suspend () -> Boolean = { false },
     volume: Float = 1.0f,
     muted: Boolean = false,
     private val duckMultiplier: Float = 0.5f
@@ -87,6 +101,17 @@ class VoiceOutputImpl(
 
     override fun playTTS(ttsUrl: String, onCompletion: () -> Unit) {
         ttsPlayer.play(ttsUrl, onCompletion)
+    }
+
+    override suspend fun speaksText() = textSpeaker != null && enableTextSpeaker()
+
+    override suspend fun speakText(text: String, onCompletion: () -> Unit) {
+        val speaker = textSpeaker
+        if (speaker == null || muted) {
+            onCompletion()
+            return
+        }
+        speaker.speak(text, volume, onCompletion)
     }
 
     override fun playAnnouncement(
@@ -136,9 +161,11 @@ class VoiceOutputImpl(
 
     override fun stopTTS() {
         ttsPlayer.stop()
+        textSpeaker?.stop()
     }
 
     override fun close() {
+        textSpeaker?.close()
         (ttsPlayer as? AutoCloseable)?.close()
         (mediaPlayer as? AutoCloseable)?.close()
     }

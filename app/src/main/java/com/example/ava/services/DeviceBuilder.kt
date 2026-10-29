@@ -9,6 +9,7 @@ import androidx.media3.common.C.USAGE_MEDIA
 import com.example.ava.esphome.EspHomeDevice
 import com.example.ava.esphome.android.logger.TimberLogger
 import com.example.ava.esphome.android.mediaplayer.media3MediaPlayer
+import com.example.ava.esphome.android.tts.AndroidTextSpeaker
 import com.example.ava.esphome.android.microphone.audioRecordMicrophoneFlow
 import com.example.ava.esphome.android.wakeword.MicroWakeWord
 import com.example.ava.esphome.entities.MediaPlayerEntity
@@ -130,6 +131,13 @@ class DeviceBuilder @Inject constructor(
             repeatTimerFinishedSound = { repeatTimerFinishedSound.get() },
             enableErrorSound = { enableErrorSound.get() },
             errorSound = { errorSound.get() },
+            textSpeaker = AndroidTextSpeaker(
+                context = context,
+                engine = { deviceTtsEngine.get() },
+                voice = { deviceTtsVoice.get() },
+                rate = { deviceTtsRatePercent.get() / 100f }
+            ),
+            enableTextSpeaker = { enableDeviceTts.get() },
             volume = playerSettings.volume,
             muted = playerSettings.muted,
         )

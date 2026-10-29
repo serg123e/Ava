@@ -138,7 +138,8 @@ class VoiceAssistant(
             is VoiceAssistantAnnounceRequest -> handleAnnouncement(
                 startConversation = message.startConversation,
                 mediaId = message.mediaId,
-                preannounceId = message.preannounceMediaId
+                preannounceId = message.preannounceMediaId,
+                text = message.text
             )
 
             is VoiceAssistantEventResponse ->
@@ -182,7 +183,8 @@ class VoiceAssistant(
     private suspend fun handleAnnouncement(
         startConversation: Boolean,
         mediaId: String,
-        preannounceId: String
+        preannounceId: String,
+        text: String
     ) {
         resetState()
         announcement = Announcement(
@@ -193,7 +195,7 @@ class VoiceAssistant(
             ended = { onTtsFinished(it) }
         ).apply {
             voiceOutput.duck()
-            announce(mediaId, preannounceId, startConversation)
+            announce(mediaId, preannounceId, startConversation, text)
         }
     }
 

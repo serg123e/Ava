@@ -59,6 +59,20 @@ class VoiceSatelliteService() : LifecycleService() {
         applicationContext.startForegroundService(serviceIntent)
     }
 
+    /**
+     * Starts a conversation as if the wake word had been spoken.
+     */
+    fun wakeAssistant() {
+        _voiceSatellite.value?.voiceAssistant?.wakeAssistant()
+    }
+
+    /**
+     * Stops the current conversation.
+     */
+    fun stopAssistant() {
+        _voiceSatellite.value?.voiceAssistant?.stopAssistant()
+    }
+
     fun stopVoiceSatellite() {
         val satellite = _voiceSatellite.getAndUpdate { null }
         if (satellite != null) {
