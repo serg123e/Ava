@@ -50,6 +50,10 @@ class VoiceSatelliteService() : LifecycleService() {
         it?.voiceAssistant?.state ?: flowOf(Stopped)
     }
 
+    val transcript = _voiceSatellite.flatMapLatest {
+        it?.voiceAssistant?.transcript ?: flowOf(null)
+    }
+
     val voiceTimers = _voiceSatellite.flatMapLatest {
         it?.voiceAssistant?.allTimers ?: flowOf(listOf())
     }

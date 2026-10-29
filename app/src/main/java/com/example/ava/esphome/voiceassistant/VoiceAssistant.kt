@@ -47,6 +47,12 @@ data object Processing : EspHomeState
 
 data class VoiceError(val message: String) : EspHomeState
 
+/**
+ * What was said in the latest conversation turn, for showing it on screen.
+ * [at] is when it last changed, in milliseconds since the epoch.
+ */
+data class Transcript(val question: String, val answer: String, val at: Long)
+
 class VoiceAssistant(
     coroutineContext: CoroutineContext,
     val voiceInput: VoiceInput,
@@ -62,6 +68,9 @@ class VoiceAssistant(
     private val subscription = MutableSharedFlow<MessageLite>()
     private val _state = MutableStateFlow<EspHomeState>(Disconnected)
     val state = _state.asStateFlow()
+
+    private val _transcript = MutableStateFlow<Transcript?>(null)
+    val transcript = _transcript.asStateFlow()
 
     private var pipeline: VoicePipeline? = null
     private var announcement: Announcement? = null
@@ -255,6 +264,7 @@ class VoiceAssistant(
 
         Timber.d("Wake assistant")
         resetState()
+        if (!isContinueConversation) showText(question = "", answer = "")
         if (textListener != null && conversationClient != null && enableDeviceStt()) {
             startDeviceConversation(textListener, conversationClient, isContinueConversation)
             return
@@ -330,6 +340,7 @@ class VoiceAssistant(
     }
 
     private suspend fun respondTo(text: String, conversationClient: ConversationClient) {
+        showText(question = text, answer = "")
         _state.value = Processing
         val result = conversationClient.process(text, deviceConversationId)
         if (result == null) {
@@ -338,6 +349,7 @@ class VoiceAssistant(
             return
         }
         deviceConversationId = result.conversationId
+        showText(answer = result.speech)
         _state.value = Responding
         voiceOutput.speakText(result.speech) {
             scope.launch {
@@ -355,9 +367,20 @@ class VoiceAssistant(
         voiceOutput.unDuck()
     }
 
+    private fun showText(question: String? = null, answer: String? = null) {
+        _transcript.update {
+            Transcript(
+                question = question ?: it?.question ?: "",
+                answer = answer ?: it?.answer ?: "",
+                at = System.currentTimeMillis()
+            )
+        }
+    }
+
     private fun createPipeline() = VoicePipeline(
         scope = scope,
         voiceOutput = voiceOutput,
+        textChanged = { question, answer -> showText(question, answer) },
         sendMessage = { subscription.emit(it) },
         listeningChanged = {
             if (it) voiceOutput.duck()

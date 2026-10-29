@@ -1,6 +1,8 @@
 package com.example.ava.ui.screens.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +32,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -84,6 +88,10 @@ private val micArea = Area(1366f, 999f, 1718f, 1292f)
 private val systemArea = Area(130f, 1030f, 900f, 1270f)
 private val clockArea = Area(2500f, 1030f, 2980f, 1270f)
 private val footerArea = Area(900f, 1312f, 2200f, 1352f)
+// What was said, on both sides of the microphone, over the system panel and the clock
+private val questionArea = Area(93f, 1005f, 1350f, 1285f)
+private val answerArea = Area(1735f, 1005f, 2900f, 1285f)
+private const val TRANSCRIPT_SHOWN_MS = 20_000L
 
 /**
  * A tile of the button row: what it says and what it asks Anfisa.
@@ -244,6 +252,32 @@ fun RetroHome(
             }
         }
 
+        // What was heard and answered, during a conversation and a while after it
+        val transcriptFlow = remember(service) { service?.transcript ?: flowOf(null) }
+        val transcript by transcriptFlow.collectAsStateWithLifecycle(null)
+        var expired by remember { mutableStateOf(false) }
+        LaunchedEffect(transcript?.at, conversing) {
+            expired = false
+            val at = transcript?.at ?: return@LaunchedEffect
+            if (!conversing) {
+                delay(TRANSCRIPT_SHOWN_MS - (System.currentTimeMillis() - at))
+                expired = true
+            }
+        }
+        val shown = transcript?.takeIf { !expired && (it.question.isNotBlank() || conversing) }
+        if (shown != null) {
+            TranscriptPanel(
+                "ВЫ:", shown.question.ifBlank { if (state == Listening) "…" else "" },
+                Modifier.at(questionArea, sx, sy), ::mono, sx
+            )
+            if (shown.answer.isNotBlank() || state == Processing) {
+                TranscriptPanel(
+                    "АНФИСА:", shown.answer.ifBlank { "…" },
+                    Modifier.at(answerArea, sx, sy), ::mono, sx
+                )
+            }
+        }
+
         Row(Modifier.at(footerArea, sx, sy), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
             Text(
                 (satellite?.name?.uppercase() ?: "АНФИСА") + "  ★  ВСЕГДА РЯДОМ",
@@ -254,6 +288,35 @@ fun RetroHome(
 }
 
 private val RU = Locale.forLanguageTag("ru")
+
+/**
+ * A dark plate with a label and what was said, sized down for longer text.
+ */
+@Composable
+private fun TranscriptPanel(
+    label: String,
+    text: String,
+    modifier: Modifier,
+    mono: (Float, Color, Boolean) -> TextStyle,
+    sx: Float
+) {
+    val rows = when {
+        text.length < 80 -> 44f
+        text.length < 160 -> 36f
+        text.length < 260 -> 30f
+        else -> 26f
+    }
+    Column(
+        modifier
+            .background(Color.Black)
+            .border(BorderStroke(2.dp, phosphorDim))
+            .padding(with(LocalDensity.current) { (30 * sx).toDp() }),
+        verticalArrangement = Arrangement.spacedBy(with(LocalDensity.current) { (8 * sx).toDp() })
+    ) {
+        Text(label, style = mono(32f, phosphorDim, true))
+        Text(text, style = mono(rows, phosphor, false), overflow = TextOverflow.Ellipsis)
+    }
+}
 
 @Composable
 private fun systemLine(

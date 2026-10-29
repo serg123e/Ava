@@ -25,7 +25,8 @@ class VoicePipeline(
     private val sendMessage: suspend (MessageLite) -> Unit,
     private val listeningChanged: (listening: Boolean) -> Unit,
     private val stateChanged: (state: EspHomeState) -> Unit,
-    private val ended: suspend (continueConversation: Boolean) -> Unit
+    private val ended: suspend (continueConversation: Boolean) -> Unit,
+    private val textChanged: (question: String?, answer: String?) -> Unit = { _, _ -> }
 ) {
     private var continueConversation = false
     private val micAudioBuffer = ArrayDeque<ByteString>()
@@ -85,6 +86,9 @@ class VoicePipeline(
             VoiceAssistantEvent.VOICE_ASSISTANT_STT_VAD_END, VoiceAssistantEvent.VOICE_ASSISTANT_STT_END -> {
                 // Received after the user has finished speaking
                 updateState(Processing)
+                // STT_END carries the recognised text
+                voiceEvent.dataList.firstOrNull { data -> data.name == "text" }?.value
+                    ?.let { textChanged(it, null) }
             }
 
             VoiceAssistantEvent.VOICE_ASSISTANT_INTENT_PROGRESS -> {
@@ -113,6 +117,7 @@ class VoicePipeline(
                 updateState(Responding)
                 // The event carries the response text, speak it on the device if enabled
                 val text = voiceEvent.dataList.firstOrNull { data -> data.name == "text" }?.value
+                text?.let { textChanged(null, it) }
                 if (!ttsPlayed && !text.isNullOrBlank() && voiceOutput.speaksText()) {
                     ttsPlayed = true
                     voiceOutput.speakText(text) { scope.launch { fireEnded() } }
