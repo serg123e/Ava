@@ -24,17 +24,21 @@ fun audioRecordMicrophoneFlow(
     audioManager: AudioManager,
     audioSource: Flow<Int> = flowOf(DEFAULT_AUDIO_SOURCE),
     audioMode: Flow<Int> = flowOf(DEFAULT_AUDIO_MODE),
-    useSpeakerphone: Flow<Boolean> = flowOf(false)
+    useSpeakerphone: Flow<Boolean> = flowOf(false),
+    twoMicrophones: Flow<Boolean> = flowOf(false)
 ): Flow<Microphone> = combine(
     audioSource,
     audioMode,
-    useSpeakerphone
-) { audioSource, audioMode, useSpeakerPhone ->
+    useSpeakerphone,
+    twoMicrophones
+) { audioSource, audioMode, useSpeakerPhone, twoMicrophones ->
     AudioRecordMicrophone(
         audioManager = audioManager,
         audioSource = audioSource,
         audioMode = audioMode,
-        useSpeakerphone = useSpeakerPhone
+        useSpeakerphone = useSpeakerPhone,
+        // Android gives apps at most two channels, from two of the built-in microphones
+        channelConfig = if (twoMicrophones) AudioFormat.CHANNEL_IN_STEREO else DEFAULT_CHANNEL_CONFIG
     )
 }
 
@@ -47,6 +51,8 @@ class AudioRecordMicrophone(
     val channelConfig: Int = DEFAULT_CHANNEL_CONFIG,
     val audioFormat: Int = DEFAULT_AUDIO_FORMAT
 ) : Microphone {
+    override val channels = if (channelConfig == AudioFormat.CHANNEL_IN_STEREO) 2 else 1
+
     private val bufferSize =
         AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat)
     private val buffer = ByteBuffer.allocateDirect(bufferSize)

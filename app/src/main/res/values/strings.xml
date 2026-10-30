@@ -64,6 +64,8 @@
     <string name="description_audio_source">The audio source defines both the physical microphone and the enabled audio processing effects</string>
     <string name="label_communication_mode">Communication mode</string>
     <string name="description_communication_mode">Enable Communication audio mode, tuned for live voice chat. Required on some devices when using the \'Voice Communication\' audio source to improve echo cancellation and noise suppression but can impact audio routing and volume.</string>
+    <string name="label_two_microphones">Two microphones</string>
+    <string name="description_two_microphones">Record two built-in microphones at once and listen for the wake word on each. The question is taken from the microphone that heard it. Some phones record one microphone twice with some audio sources: on a Galaxy Note20 the Mic and Camcorder sources give two, Voice recognition and Unprocessed give one.</string>
     <string name="label_speakerphone">Speakerphone</string>
     <string name="description_speakerphone">Enable the speakerphone (if any). Required on some devices to increase audio volume when Communication mode is enabled.</string>
     <string name="description_audio_source_voice_recognition">(Default) Tuned for voice recognition</string>

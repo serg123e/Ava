@@ -66,6 +66,11 @@ class VoiceOutputImpl(
     private val mediaPlayer: MediaPlayer,
     private val enableWakeSound: suspend () -> Boolean,
     private val wakeSound: suspend () -> String,
+    /**
+     * Silence to play before the wake sound when the audio output is asleep, or null.
+     * A Bluetooth speaker takes about a second to resume and drops what plays meanwhile.
+     */
+    private val warmUpSound: suspend () -> String? = { null },
     private val timerFinishedSound: suspend () -> String,
     private val repeatTimerFinishedSound: suspend () -> Boolean,
     private val enableErrorSound: suspend () -> Boolean,
@@ -129,7 +134,7 @@ class VoiceOutputImpl(
 
     override suspend fun playWakeSound(onCompletion: () -> Unit) {
         if (enableWakeSound()) {
-            ttsPlayer.play(wakeSound(), onCompletion)
+            ttsPlayer.play(listOfNotNull(warmUpSound(), wakeSound()), onCompletion)
         } else onCompletion()
     }
 

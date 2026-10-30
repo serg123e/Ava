@@ -8,6 +8,7 @@ import com.example.ava.esphome.voiceassistant.Responding
 import com.example.ava.esphome.voiceassistant.VoiceAssistant
 import com.example.ava.esphome.voiceassistant.VoiceInput
 import com.example.ava.esphome.voiceassistant.VoiceOutput
+import com.example.ava.esphome.voiceassistant.WakeSamples
 import com.example.ava.stubs.StubVoiceInput
 import com.example.ava.stubs.StubVoiceOutput
 import com.example.esphomeproto.api.VoiceAssistantAnnounceFinished
@@ -28,15 +29,79 @@ import kotlin.test.assertEquals
 class VoiceAssistantTest {
     suspend fun TestScope.createVoiceAssistant(
         voiceInput: VoiceInput = StubVoiceInput(),
-        voiceOutput: VoiceOutput = StubVoiceOutput()
+        voiceOutput: VoiceOutput = StubVoiceOutput(),
+        wakeSamples: WakeSamples? = null
     ) = VoiceAssistant(
         coroutineContext = this.coroutineContext,
         voiceInput = voiceInput,
         voiceOutput = voiceOutput,
+        wakeSamples = wakeSamples,
     ).apply {
         start()
         onConnected()
         advanceUntilIdle()
+    }
+
+    @Test
+    fun should_stop_listening_when_the_user_presses_stop() = runTest {
+        val voiceInput = StubVoiceInput()
+        val voiceAssistant = createVoiceAssistant(voiceInput = voiceInput)
+        voiceInput.audioResults.emit(AudioResult.WakeDetected("wake word"))
+        advanceUntilIdle()
+        assertEquals(Listening, voiceAssistant.state.value)
+
+        voiceAssistant.stopAssistant()
+        advanceUntilIdle()
+
+        assertEquals(Connected, voiceAssistant.state.value)
+        assertEquals(false, voiceInput.isStreaming)
+        voiceAssistant.close()
+    }
+
+    @Test
+    fun should_save_the_wake_word_audio_as_true_when_speech_is_recognised() = runTest {
+        val voiceInput = StubVoiceInput()
+        val saved = mutableListOf<Pair<ByteArray, Boolean>>()
+        val voiceAssistant = createVoiceAssistant(
+            voiceInput = voiceInput,
+            wakeSamples = { audio, recognised -> saved += audio to recognised }
+        )
+        val audio = byteArrayOf(1, 2)
+        voiceInput.audioResults.emit(AudioResult.WakeDetected("wake word", audio))
+        advanceUntilIdle()
+
+        voiceAssistant.handleMessage(voiceAssistantEventResponse {
+            eventType = VoiceAssistantEvent.VOICE_ASSISTANT_STT_END
+            data += voiceAssistantEventData { name = "text"; value = "what time is it" }
+        })
+        voiceAssistant.handleMessage(voiceAssistantEventResponse {
+            eventType = VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END
+        })
+        advanceUntilIdle()
+
+        assertEquals(listOf(audio to true), saved)
+        voiceAssistant.close()
+    }
+
+    @Test
+    fun should_save_the_wake_word_audio_as_false_when_nothing_is_recognised() = runTest {
+        val voiceInput = StubVoiceInput()
+        val saved = mutableListOf<Pair<ByteArray, Boolean>>()
+        val voiceAssistant = createVoiceAssistant(
+            voiceInput = voiceInput,
+            wakeSamples = { audio, recognised -> saved += audio to recognised }
+        )
+        val audio = byteArrayOf(1, 2)
+        voiceInput.audioResults.emit(AudioResult.WakeDetected("wake word", audio))
+        advanceUntilIdle()
+
+        voiceAssistant.handleMessage(voiceAssistantEventResponse {
+            eventType = VoiceAssistantEvent.VOICE_ASSISTANT_RUN_END
+        })
+        advanceUntilIdle()
+
+        assertEquals(listOf(audio to false), saved)
+        voiceAssistant.close()
     }
 
     @Test
@@ -189,15 +254,10 @@ class VoiceAssistantTest {
 
         // Should stop playback and send an announce finished response
         assertEquals(true, voiceOutput.stopped)
-        assertEquals(1, sentMessages.size)
         assert(sentMessages[0] is VoiceAssistantAnnounceFinished)
 
-        // Wake sound playback and completion
+        // Should start the pipeline while the wake sound plays, not after it
         assertEquals(listOf("wake"), voiceOutput.mediaUrls)
-        voiceOutput.onCompletion()
-        advanceUntilIdle()
-
-        // Should send pipeline start request
         assertEquals(2, sentMessages.size)
         assertEquals(true, (sentMessages[1] as VoiceAssistantRequest).start)
 

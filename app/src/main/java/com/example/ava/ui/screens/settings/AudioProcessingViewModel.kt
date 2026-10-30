@@ -55,6 +55,7 @@ data class AudioProcessingState(
     val audioSource: SelectItem,
     val communicationMode: Boolean,
     val speakerphone: Boolean,
+    val twoMicrophones: Boolean,
 )
 
 @HiltViewModel
@@ -67,6 +68,7 @@ class AudioProcessingViewModel @Inject constructor(private val audioProcessingSe
                 ?: audioSources.first { it.key == MediaRecorder.AudioSource.VOICE_RECOGNITION },
             communicationMode = settings.audioMode == AudioManager.MODE_IN_COMMUNICATION,
             speakerphone = settings.speakerphone,
+            twoMicrophones = settings.twoMicrophones,
         )
     }
 
@@ -82,5 +84,9 @@ class AudioProcessingViewModel @Inject constructor(private val audioProcessingSe
 
     fun saveSpeakerphone(speakerphone: Boolean) = viewModelScope.launch {
         audioProcessingSettingsStore.speakerphone.set(speakerphone)
+    }
+
+    fun saveTwoMicrophones(twoMicrophones: Boolean) = viewModelScope.launch {
+        audioProcessingSettingsStore.twoMicrophones.set(twoMicrophones)
     }
 }

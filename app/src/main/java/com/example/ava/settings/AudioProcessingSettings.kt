@@ -19,6 +19,7 @@ data class AudioProcessingSettings(
     val audioSource: Int = MediaRecorder.AudioSource.VOICE_RECOGNITION,
     val audioMode: Int = AudioManager.MODE_NORMAL,
     val speakerphone: Boolean = false,
+    val twoMicrophones: Boolean = false,
 )
 
 private val DEFAULT = AudioProcessingSettings()
@@ -50,4 +51,10 @@ interface AudioProcessingSettingsStore : SettingsStore<AudioProcessingSettings> 
 
     val speakerphone: SettingState<Boolean>
         get() = setting(get = { this.speakerphone }, set = { copy(speakerphone = it) })
+
+    /**
+     * Whether to record two microphones at once and listen for the wake word on each.
+     */
+    val twoMicrophones: SettingState<Boolean>
+        get() = setting(get = { twoMicrophones }, set = { copy(twoMicrophones = it) })
 }

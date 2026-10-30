@@ -1,6 +1,7 @@
 package com.example.ava.services
 
 import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC
 import androidx.media3.common.C.AUDIO_CONTENT_TYPE_SPEECH
@@ -13,6 +14,7 @@ import com.example.ava.esphome.android.stt.AndroidTextListener
 import com.example.ava.esphome.android.tts.AndroidTextSpeaker
 import com.example.ava.esphome.android.microphone.audioRecordMicrophoneFlow
 import com.example.ava.esphome.android.wakeword.MicroWakeWord
+import com.example.ava.esphome.android.wakeword.WavWakeSamples
 import com.example.ava.esphome.entities.MediaPlayerEntity
 import com.example.ava.esphome.entities.SwitchEntity
 import com.example.ava.esphome.voiceassistant.VoiceAssistant
@@ -29,6 +31,7 @@ import com.example.ava.settings.availableWakeWords
 import com.example.esphomeproto.api.VoiceAssistantFeature
 import com.example.esphomeproto.api.deviceInfoResponse
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 
@@ -76,7 +79,10 @@ class DeviceBuilder @Inject constructor(
                     val settings = satelliteSettingsStore.get()
                     settings.enableDeviceStt && settings.homeAssistantUrl.isNotBlank() &&
                             settings.homeAssistantToken.isNotBlank()
-                }
+                },
+                // Collected with adb pull for training the wake word model, see
+                // ha/wakeword in the anfisa repository
+                wakeSamples = WavWakeSamples(File(context.getExternalFilesDir(null), "wake-samples"))
             ),
             logger = TimberLogger(),
             entities = listOf(
@@ -119,14 +125,16 @@ class DeviceBuilder @Inject constructor(
         availableStopWords = { get().availableStopWords(context) },
         activeWakeWords = activeWakeWords,
         activeStopWords = activeStopWords,
-        muted = muted
+        muted = muted,
+        secondChannelWakeWord = MicroWakeWord()
     )
 
     private fun AudioProcessingSettingsStore.toMicrophone() = audioRecordMicrophoneFlow(
         audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager,
         audioSource = audioSource,
         audioMode = audioMode,
-        useSpeakerphone = speakerphone
+        useSpeakerphone = speakerphone,
+        twoMicrophones = twoMicrophones
     )
 
     private suspend fun PlayerSettingsStore.toVoiceOutput(): VoiceOutputImpl {
@@ -145,6 +153,7 @@ class DeviceBuilder @Inject constructor(
             ),
             enableWakeSound = { enableWakeSound.get() },
             wakeSound = { wakeSound.get() },
+            warmUpSound = { if (bluetoothOutputAsleep()) "asset:///sounds/silence.flac" else null },
             timerFinishedSound = { timerFinishedSound.get() },
             repeatTimerFinishedSound = { repeatTimerFinishedSound.get() },
             enableErrorSound = { enableErrorSound.get() },
@@ -162,5 +171,15 @@ class DeviceBuilder @Inject constructor(
             // ("turn off the radio" heard as "turn off the computer"), so duck it hard
             duckMultiplier = 0.1f,
         )
+    }
+
+    /**
+     * Whether audio goes to a Bluetooth speaker that has gone quiet: Android suspends the
+     * stream a few seconds after the last sound, and resuming it takes about a second.
+     */
+    private fun bluetoothOutputAsleep(): Boolean {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return !audioManager.isMusicActive && audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
     }
 }

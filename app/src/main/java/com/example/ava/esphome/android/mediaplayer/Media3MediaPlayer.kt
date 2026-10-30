@@ -111,7 +111,9 @@ class Media3MediaPlayer(
     }
 
     override fun requestFocus() {
-        init()
+        // A player that exists already holds the focus; recreating it would cut off
+        // what it plays, e.g. the wake sound when the pipeline starts listening over it
+        if (_player == null) init()
     }
 
     override fun play(mediaUris: Iterable<String>, onCompletion: () -> Unit) {

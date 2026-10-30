@@ -60,6 +60,7 @@ class VoiceAssistant(
     private val textListener: TextListener? = null,
     private val conversationClient: ConversationClient? = null,
     private val enableDeviceStt: suspend () -> Boolean = { false },
+    private val wakeSamples: WakeSamples? = null,
 ) : AutoCloseable {
     private val scope = CoroutineScope(
         coroutineContext + Job(coroutineContext.job) + CoroutineName("${this.javaClass.simpleName} Scope")
@@ -73,6 +74,7 @@ class VoiceAssistant(
     val transcript = _transcript.asStateFlow()
 
     private var pipeline: VoicePipeline? = null
+    private var wakeSample: ByteArray? = null
     private var announcement: Announcement? = null
     private var deviceConversation: Job? = null
     private var deviceConversationId: String? = null
@@ -97,8 +99,11 @@ class VoiceAssistant(
         scope.launch { doWakeAssistant() }
     }
 
+    /**
+     * Stops the conversation at the user's request, including while listening.
+     */
     fun stopAssistant() {
-        scope.launch { doStopAssistant() }
+        scope.launch { doStopAssistant(byUser = true) }
     }
 
     fun stopTimer() {
@@ -223,14 +228,14 @@ class VoiceAssistant(
             is AudioResult.Audio -> pipeline?.processMicAudio(audioResult.audio)
 
             is AudioResult.WakeDetected ->
-                onWakeDetected(audioResult.wakeWord)
+                onWakeDetected(audioResult.wakeWord, audioResult.audio)
 
             is AudioResult.StopDetected ->
                 onStopDetected()
         }
     }
 
-    private suspend fun onWakeDetected(wakeWordPhrase: String) {
+    private suspend fun onWakeDetected(wakeWordPhrase: String, audio: ByteArray?) {
         // Allow using the wake word to stop the timer.
         // TODO: Should the assistant also wake?
         if (isRinging) {
@@ -240,7 +245,7 @@ class VoiceAssistant(
             // trigger the wake word, cutting the response short
             Timber.d("Ignoring wake word while speaking the response")
         } else {
-            doWakeAssistant(wakeWordPhrase)
+            doWakeAssistant(wakeWordPhrase, wakeAudio = audio)
         }
     }
 
@@ -254,7 +259,8 @@ class VoiceAssistant(
 
     private suspend fun doWakeAssistant(
         wakeWordPhrase: String = "",
-        isContinueConversation: Boolean = false
+        isContinueConversation: Boolean = false,
+        wakeAudio: ByteArray? = null
     ) {
         // Multiple wake detections from the same wake word can be triggered
         // so ensure the assistant is only woken once. Currently this is
@@ -264,6 +270,7 @@ class VoiceAssistant(
 
         Timber.d("Wake assistant")
         resetState()
+        wakeSample = wakeAudio
         if (!isContinueConversation) showText(question = "", answer = "")
         if (textListener != null && conversationClient != null && enableDeviceStt()) {
             startDeviceConversation(textListener, conversationClient, isContinueConversation)
@@ -272,10 +279,11 @@ class VoiceAssistant(
         pipeline = createPipeline()
         if (!isContinueConversation) {
             voiceOutput.duck()
-            // Start streaming audio only after the wake sound has finished
-            voiceOutput.playWakeSound {
-                scope.launch { pipeline?.start(wakeWordPhrase) }
-            }
+            // Listen while the wake sound plays: on a Bluetooth speaker the sound starts up to
+            // a second late, and waiting for it to finish delayed listening by 1.5 s. Speech
+            // recognition ignores the sound at the start of the recording.
+            pipeline?.start(wakeWordPhrase)
+            voiceOutput.playWakeSound()
         } else {
             pipeline?.start()
         }
@@ -363,11 +371,13 @@ class VoiceAssistant(
     }
 
     private fun endDeviceConversation() {
+        saveWakeSample(recognised = false)
         _state.value = Connected
         voiceOutput.unDuck()
     }
 
     private fun showText(question: String? = null, answer: String? = null) {
+        if (!question.isNullOrBlank()) saveWakeSample(recognised = true)
         _transcript.update {
             Transcript(
                 question = question ?: it?.question ?: "",
@@ -390,12 +400,12 @@ class VoiceAssistant(
         ended = { onTtsFinished(it) }
     )
 
-    private suspend fun doStopAssistant() {
+    private suspend fun doStopAssistant(byUser: Boolean = false) {
         // Ignore the stop request if the assistant is idle or currently streaming
         // microphone audio as there's either nothing to stop or the stop word was
-        // used incidentally as part of the voice command.
+        // used incidentally as part of the voice command. A stop button means it.
         val state = _state.value
-        if (state is Connected || state is Listening) return
+        if (state is Connected || (state is Listening && !byUser)) return
         Timber.d("Stop assistant")
         resetState()
         voiceOutput.unDuck()
@@ -410,8 +420,20 @@ class VoiceAssistant(
         }
     }
 
+    /**
+     * Saves the audio of the wake word that started the conversation, once it is known
+     * whether any speech was recognised after it. Without speech the wake word was
+     * probably false.
+     */
+    private fun saveWakeSample(recognised: Boolean) {
+        val audio = wakeSample ?: return
+        wakeSample = null
+        wakeSamples?.save(audio, recognised)
+    }
+
     private suspend fun onTtsFinished(continueConversation: Boolean) {
         Timber.d("TTS finished")
+        saveWakeSample(recognised = false)
         if (continueConversation) {
             Timber.d("Continuing conversation")
             doWakeAssistant(isContinueConversation = true)
@@ -436,6 +458,7 @@ class VoiceAssistant(
     }
 
     private suspend fun resetState(newState: EspHomeState = Connected) {
+        saveWakeSample(recognised = false)
         deviceConversation?.cancel()
         deviceConversation = null
         voiceInput.setPaused(false)

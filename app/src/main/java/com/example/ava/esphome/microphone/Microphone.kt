@@ -12,6 +12,11 @@ interface Microphone : AutoCloseable {
     fun start()
 
     /**
+     * The number of channels [read] returns, their 16-bit samples interleaved.
+     */
+    val channels: Int get() = 1
+
+    /**
      * Reads audio from the microphone, blocking until audio is available.
      * The returned buffer is only valid until the next call to [read].
      * Must only be called between calls to [start] and [stop].

@@ -91,5 +91,15 @@ fun AudioProcessingScreen(
                 onCheckedChange = { viewModel.saveSpeakerphone(it) }
             )
         }
+
+        item {
+            SwitchSetting(
+                name = stringResource(R.string.label_two_microphones),
+                description = stringResource(R.string.description_two_microphones),
+                value = audioProcessingState?.twoMicrophones ?: false,
+                enabled = enabled,
+                onCheckedChange = { viewModel.saveTwoMicrophones(it) }
+            )
+        }
     }
 }

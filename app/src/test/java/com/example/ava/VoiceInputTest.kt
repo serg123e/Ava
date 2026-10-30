@@ -17,9 +17,13 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -32,7 +36,8 @@ class VoiceInputTest {
         activeWakeWords: List<String> = availableWakeWords.map { it.id },
         activeStopWords: List<String> = availableStopWords.map { it.id },
         muted: SettingState<Boolean> = stubSettingState(false),
-        dispatcher: CoroutineDispatcher = Dispatchers.IO
+        dispatcher: CoroutineDispatcher = Dispatchers.IO,
+        secondChannelWakeWord: WakeWord? = null
     ) = VoiceInputImpl(
         microphone = flowOf(microphone),
         wakeWord = wakeWord,
@@ -41,8 +46,22 @@ class VoiceInputTest {
         activeWakeWords = stubSettingState(activeWakeWords),
         activeStopWords = stubSettingState(activeStopWords),
         muted = muted,
-        dispatcher = dispatcher
+        dispatcher = dispatcher,
+        secondChannelWakeWord = secondChannelWakeWord
     )
+
+    // Interleaved samples: left channel 1, 2; right channel 10, 20
+    private fun stereoMicrophone() = object : StubMicrophone() {
+        override val channels = 2
+        override fun read(): ByteBuffer {
+            super.read()
+            return ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN)
+                .putShort(1).putShort(10).putShort(2).putShort(20).flip() as ByteBuffer
+        }
+    }
+
+    private fun ByteBuffer.samples() = order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+        .let { buffer -> List(buffer.remaining()) { buffer.get(it) } }
 
     @Test
     fun should_close_microphone_when_flow_cancelled() = runTest {
@@ -159,5 +178,69 @@ class VoiceInputTest {
 
         val result = voiceInput.start().first()
         assert(result is AudioResult.StopDetected)
+    }
+
+    @Test
+    fun should_listen_for_the_wake_word_on_each_channel_of_two_microphones() = runTest {
+        val wakeWords = listOf(stubWakeWordWithId(id = "wake", wakeWord = "wake"))
+        val heard = CopyOnWriteArrayList<List<Short>>()
+        val voiceInput = createVoiceInput(
+            microphone = stereoMicrophone(),
+            wakeWord = object : StubWakeWord() {
+                override fun detect(audio: ByteBuffer): List<String> {
+                    heard += audio.samples()
+                    return emptyList()
+                }
+            },
+            secondChannelWakeWord = object : StubWakeWord() {
+                override fun detect(audio: ByteBuffer): List<String> {
+                    heard += audio.samples()
+                    return wakeWords.map { it.id }
+                }
+            },
+            availableWakeWords = wakeWords
+        )
+
+        val result = voiceInput.start().first()
+        assertEquals("wake", (result as AudioResult.WakeDetected).wakeWord)
+        assertEquals(listOf(listOf<Short>(1, 2), listOf<Short>(10, 20)), heard.take(2))
+    }
+
+    @Test
+    fun should_attach_the_audio_of_the_channel_that_heard_the_wake_word() = runTest {
+        val wakeWords = listOf(stubWakeWordWithId(id = "wake", wakeWord = "wake"))
+        var reads = 0
+        val voiceInput = createVoiceInput(
+            microphone = stereoMicrophone(),
+            wakeWord = object : StubWakeWord() {
+                override fun detect(audio: ByteBuffer): List<String> = emptyList()
+            },
+            secondChannelWakeWord = object : StubWakeWord() {
+                override fun detect(audio: ByteBuffer): List<String> =
+                    if (++reads == 2) wakeWords.map { it.id } else emptyList()
+            },
+            availableWakeWords = wakeWords
+        )
+
+        val result = voiceInput.start().first() as AudioResult.WakeDetected
+        val audio = ByteBuffer.wrap(result.audio!!).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(listOf<Short>(10, 20, 10, 20), audio.samples())
+    }
+
+    @Test
+    fun should_report_a_word_heard_by_both_microphones_once_and_stream_the_channel_that_heard_it() = runTest {
+        val wakeWords = listOf(stubWakeWordWithId(id = "wake", wakeWord = "wake"))
+        val voiceInput = createVoiceInput(
+            microphone = stereoMicrophone(),
+            wakeWord = StubWakeWord(),
+            secondChannelWakeWord = StubWakeWord(),
+            availableWakeWords = wakeWords
+        )
+        voiceInput.isStreaming = true
+
+        val results = voiceInput.start().take(4).toList()
+        assertEquals(1, results.count { it is AudioResult.WakeDetected })
+        val audio = results.filterIsInstance<AudioResult.Audio>().last().audio
+        assertEquals(listOf<Short>(1, 2), audio.asReadOnlyByteBuffer().samples())
     }
 }
