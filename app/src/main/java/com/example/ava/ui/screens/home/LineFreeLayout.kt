@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -58,6 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.time.Duration
@@ -84,6 +87,9 @@ private val switchLabelArea = Area(347f, 150f, 718f, 285f)
 private val settingsArea = Area(2779f, 131f, 3003f, 309f)
 private val statusArea = Area(1330f, 375f, 2280f, 640f)
 private val stagesArea = Area(2300f, 375f, 2880f, 640f)
+// The picture window left of the status display, its left corners cut off by the frame
+private val heroArea = Area(53f, 336f, 1286f, 669f)
+private const val HERO_CORNER = 27f
 private val micArea = Area(1366f, 999f, 1718f, 1292f)
 private val systemArea = Area(130f, 1030f, 900f, 1270f)
 private val clockArea = Area(2500f, 1030f, 2980f, 1270f)
@@ -92,6 +98,14 @@ private val footerArea = Area(900f, 1312f, 2200f, 1352f)
 private val questionArea = Area(93f, 1005f, 1350f, 1285f)
 private val answerArea = Area(1735f, 1005f, 2900f, 1285f)
 private const val TRANSCRIPT_SHOWN_MS = 20_000L
+
+// Scenes of the heroine for the picture window, one at a time, changed every hour
+private val heroes = listOf(
+    R.drawable.retro_hero_01, R.drawable.retro_hero_02, R.drawable.retro_hero_03, R.drawable.retro_hero_04,
+    R.drawable.retro_hero_05, R.drawable.retro_hero_06, R.drawable.retro_hero_07, R.drawable.retro_hero_08,
+    R.drawable.retro_hero_09, R.drawable.retro_hero_10, R.drawable.retro_hero_11, R.drawable.retro_hero_12,
+    R.drawable.retro_hero_13, R.drawable.retro_hero_14, R.drawable.retro_hero_15, R.drawable.retro_hero_16,
+)
 
 /**
  * A tile of the button row: what it says and what it asks Anfisa.
@@ -135,16 +149,25 @@ fun RetroHome(
         color = color
     )
 
+    // While the satellite is stopped the console sleeps: dimmed artwork, no live panels
+    val on = state !is Stopped
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Image(
-            painter = painterResource(R.drawable.retro_panel),
+            painter = painterResource(if (on) R.drawable.retro_panel else R.drawable.retro_panel_off),
             contentDescription = null,
             contentScale = ContentScale.FillBounds,
             modifier = Modifier.fillMaxSize()
         )
+        if (on) Image(
+            painter = painterResource(rememberHero()),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .at(heroArea, sx, sy)
+                .clip(with(density) { CutCornerShape(topStart = (HERO_CORNER * sx).toDp(), bottomStart = (HERO_CORNER * sx).toDp()) })
+        )
 
-        // The switch is drawn on; dim it while the satellite is stopped
-        val on = state !is Stopped
+        // The switch is drawn on, in either position
         val launch = rememberLaunchWithMultiplePermissions(onPermissionGranted = { service?.startVoiceSatellite() })
         Box(
             Modifier
@@ -153,7 +176,6 @@ fun RetroHome(
                 .clickable(role = Role.Switch) {
                     if (on) service?.stopVoiceSatellite() else launch.launch(VOICE_SATELLITE_PERMISSIONS)
                 }
-                .background(if (on) Color.Transparent else Color.Black.copy(alpha = 0.6f))
         )
         Text(
             if (on) "РЕЖИМ\nПРОСЛУШИВАНИЯ" else "ВЫКЛЮЧЕНА",
@@ -173,7 +195,7 @@ fun RetroHome(
             Text(statusTitle(state), style = mono(110f, if (state.isProblem()) amber else phosphor, bold = true))
             statusDetail(state)?.let { Text(it, style = mono(40f, phosphorDim)) }
         }
-        Column(Modifier.at(stagesArea, sx, sy), verticalArrangement = Arrangement.Center) {
+        if (on) Column(Modifier.at(stagesArea, sx, sy), verticalArrangement = Arrangement.Center) {
             val stage = when (state) {
                 Listening -> 0
                 Processing -> 1
@@ -201,7 +223,7 @@ fun RetroHome(
                         else currentService.askText(tile.question)
                     }
             ) {
-                Column(
+                if (on) Column(
                     Modifier.fillMaxSize().padding(start = with(density) { (260 * sx).toDp() }),
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -371,6 +393,22 @@ private fun rememberNow(): LocalDateTime {
         }
     }
     return now
+}
+
+/**
+ * A random scene of the heroine, changed to a different one at the start of every hour.
+ */
+@Composable
+private fun rememberHero(): Int {
+    var hero by remember { mutableStateOf(heroes.random()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = LocalDateTime.now()
+            delay(ChronoUnit.MILLIS.between(now, now.truncatedTo(ChronoUnit.HOURS).plusHours(1)))
+            hero = (heroes - hero).random()
+        }
+    }
+    return hero
 }
 
 /**
